@@ -16,7 +16,7 @@ PRICES = {
     "1day": {"name": "1 день", "days": 1, "price": 15},
     "7days": {"name": "7 дней", "days": 7, "price": 30},
     "30days": {"name": "30 дней", "days": 30, "price": 70},
-    "365days": {"name": "365 дней", "days": 365, "price": 100}
+    "365days": {"name": "365 дней", "days": 365, "price": 100},  # было 365, стало 100
 }
 
 # Реквизиты
@@ -134,6 +134,78 @@ async def handle_receipt(message: types.Message, state: FSMContext):
         except:
             pass
     
+    await message.answer(
+        "✅ <b>Чек отправлен!</b>\n\n"
+        "Админ проверит оплату и выдаст ключ.\n"
+        "Обычно это занимает 5-15 минут.",
+        parse_mode="HTML"
+    )
+    await state.clear()
+
+@router.callback_query(lambda c: c.data.startswith("approve_") or c.data.startswith("reject_"))
+async def handle_admin_decision(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    
+    action, order_id = callback.data.split("_")
+    order_id = int(order_id)
+    
+    cursor = db.conn.cursor()
+    cursor.execute("SELECT * FROM orders WHERE id = ?", (order_id,))
+    order = cursor.fetchone()
+    
+    if not order or order["status"] != "pending":
+        await callback.answer("Заказ уже обработан")
+        return
+    
+    if action == "approve":
+        days_map = {"1day": 1, "7days": 7, "30days": 30, "365days": 365}
+        days = days_map.get(order["tariff"], 30)
+        
+        raw_key = secrets.token_hex(8).upper()
+        
+        cursor.execute("""
+            INSERT INTO license_keys (key, plan, days, created_by)
+            VALUES (?, ?, ?, ?)
+        """, (raw_key, order["tariff"], days, callback.from_user.id))
+        
+        cursor.execute("""
+            UPDATE orders SET status = 'approved', key_generated = ? WHERE id = ?
+        """, (raw_key, order_id))
+        db.conn.commit()
+        
+        await callback.bot.send_message(
+            order["user_id"],
+            f"✅ <b>Заказ #{order_id} одобрен!</b>\n\n"
+            f"🔑 <b>Ваш ключ:</b>\n<code>{raw_key}</code>\n\n"
+            f"📝 Активация: <code>/activate {raw_key} ТВОЙ_HWID</code>",
+            parse_mode="HTML"
+        )
+        
+        await callback.message.edit_caption(
+            caption=f"✅ <b>Заказ #{order_id} ОДОБРЕН</b>\nКлюч: {raw_key}",
+            parse_mode="HTML"
+        )
+        await callback.answer("✅ Ключ выдан")
+    else:
+        cursor.execute("UPDATE orders SET status = 'cancelled' WHERE id = ?", (order_id,))
+        db.conn.commit()
+        
+        await callback.bot.send_message(
+            order["user_id"],
+            f"❌ <b>Заказ #{order_id} отклонен</b>\n\n"
+            f"Причина: оплата не подтверждена.\nПопробуй снова /buy",
+            parse_mode="HTML"
+        )
+        await callback.message.edit_caption(caption=f"❌ Заказ #{order_id} ОТКЛОНЕН")
+        await callback.answer("❌ Отклонен")
+
+@router.callback_query(lambda c: c.data == "cancel_payment")
+async def cancel_payment(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text("❌ Оплата отменена")
+    await callback.answer()
     await message.answer(
         "✅ <b>Чек отправлен!</b>\n\n"
         "Админ проверит оплату и выдаст ключ.\n"
