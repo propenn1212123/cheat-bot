@@ -1,13 +1,15 @@
 # handlers.py
-from aiogram import Router, types
+from aiogram import Router, types, F
 from aiogram.filters import Command
 from datetime import datetime
 
 from database import db
 from admin_panel import router as admin_router
+from payment import router as payment_router
 
 router = Router()
 router.include_router(admin_router)
+router.include_router(payment_router)
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -15,11 +17,13 @@ async def cmd_start(message: types.Message):
         "🎮 <b>Cheat Panel Bot</b>\n\n"
         "📌 <b>Как активировать:</b>\n"
         "1. Запусти чит, он покажет HWID\n"
-        "2. Купи ключ у админа\n"
+        "2. Купи ключ у админа или через /buy\n"
         "3. Отправь: <code>/activate КЛЮЧ HWID</code>\n\n"
-        "📝 <b>Пример:</b>\n"
+        "💰 <b>Купить ключ:</b> /buy\n\n"
+        "📝 <b>Пример активации:</b>\n"
         "<code>/activate A7F3D9C2B4E6F1A8 ABC123DEF456</code>\n\n"
         "🔍 <b>Команды:</b>\n"
+        "/buy - купить ключ\n"
         "/check - проверить статус\n"
         "/activate - активировать подписку",
         parse_mode="HTML"
@@ -69,6 +73,7 @@ async def cmd_check(message: types.Message):
         "📊 <b>Проверка статуса</b>\n\n"
         "Чит автоматически проверяет HWID при запуске.\n"
         "Если что-то не работает - обратись к админу.\n\n"
+        "💰 Купить ключ: /buy\n"
         "👑 Админ: @support",
         parse_mode="HTML"
     )
