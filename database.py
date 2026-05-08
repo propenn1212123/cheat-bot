@@ -28,7 +28,7 @@ class Database:
             )
         """)
         
-        # Таблица ключей
+        # Таблица лицензионных ключей
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS license_keys (
                 key TEXT PRIMARY KEY,
@@ -49,6 +49,21 @@ class Database:
                 user_id INTEGER,
                 reason TEXT,
                 banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Таблица заказов (ДОБАВЛЕНО)
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                username TEXT,
+                tariff TEXT,
+                price INTEGER,
+                receipt_url TEXT,
+                status TEXT DEFAULT 'pending',
+                key_generated TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
@@ -81,10 +96,7 @@ class Database:
     # ========== HWID СИСТЕМА ==========
     
     async def check_hwid_access(self, hwid: str) -> Tuple[bool, str]:
-        """
-        Проверяет доступ по HWID для чита
-        Возвращает: (доступ_разрешен, сообщение)
-        """
+        """Проверяет доступ по HWID для чита"""
         # Проверяем бан по HWID
         banned = await self.fetchone(
             "SELECT * FROM banned_hwid WHERE hwid = ?", 
@@ -114,10 +126,7 @@ class Database:
         return (True, "Доступ разрешён")
     
     async def activate_with_key(self, user_id: int, username: str, key: str, hwid: str) -> Tuple[bool, str]:
-        """
-        Активация подписки по ключу с привязкой HWID
-        Возвращает: (успех, сообщение_или_дата)
-        """
+        """Активация подписки по ключу с привязкой HWID"""
         # Проверяем ключ
         key_info = await self.fetchone(
             "SELECT * FROM license_keys WHERE key = ?", 
@@ -174,7 +183,7 @@ class Database:
     
     async def create_key(self, key: str, plan: str, days: int, created_by: int) -> bool:
         """Создаёт новый ключ"""
-        expires = datetime.now() + timedelta(days=30)  # Ключ действителен 30 дней
+        expires = datetime.now() + timedelta(days=30)
         try:
             await self.execute(
                 "INSERT INTO license_keys (key, plan, days, expires_at, created_by) VALUES (?, ?, ?, ?, ?)",
